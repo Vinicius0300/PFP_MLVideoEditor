@@ -31,81 +31,159 @@ export function generateBrushOutline(pathPoints: Point[], brushRadius: number): 
   if (pathPoints.length === 0) return [];
 
   if (pathPoints.length === 1) {
-    // Apenas um ponto: retorna um círculo
-    return createCircle(pathPoints[0], brushRadius);
+    // Apenas um ponto: retorna um círculo completo
+    return createCircle(pathPoints[0], brushRadius, 32);
   }
 
-  // Para múltiplos pontos, criar contorno como stroke com espessura
-  const leftSide: Point[] = [];
-  const rightSide: Point[] = [];
+  const outline: Point[] = [];
+
+  // Adicionar semicírculo inicial
+  const firstPoint = pathPoints[0];
+  const secondPoint = pathPoints[1];
+  const firstDx = secondPoint.x - firstPoint.x;
+  const firstDy = secondPoint.y - firstPoint.y;
+  const firstAngle = Math.atan2(firstDy, firstDx);
+
+  // Semicírculo inicial (20 segmentos para suavidade)
+  for (let i = 0; i <= 20; i++) {
+    const angle = firstAngle + Math.PI / 2 + (i / 20) * Math.PI;
+    outline.push({
+      x: firstPoint.x + brushRadius * Math.cos(angle),
+      y: firstPoint.y + brushRadius * Math.sin(angle),
+    });
+  }
 
   // Processar cada segmento do path
   for (let i = 0; i < pathPoints.length - 1; i++) {
     const p1 = pathPoints[i];
     const p2 = pathPoints[i + 1];
 
-    // Vetor direção
+    // Vetor direção atual
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy);
 
     if (len === 0) continue;
 
-    // Vetor perpendicular normalizado (aponta para a esquerda)
+    // Vetor perpendicular (aponta para a esquerda)
     const perpX = -dy / len;
     const perpY = dx / len;
 
-    // Pontos offset
-    const leftP1 = { x: p1.x + perpX * brushRadius, y: p1.y + perpY * brushRadius };
-    const rightP1 = { x: p1.x - perpX * brushRadius, y: p1.y - perpY * brushRadius };
-    const leftP2 = { x: p2.x + perpX * brushRadius, y: p2.y + perpY * brushRadius };
-    const rightP2 = { x: p2.x - perpX * brushRadius, y: p2.y - perpY * brushRadius };
+    // Ponto no lado esquerdo de p2
+    const leftP2 = {
+      x: p2.x + perpX * brushRadius,
+      y: p2.y + perpY * brushRadius,
+    };
 
-    // Adicionar pontos aos lados
-    if (i === 0) {
-      // Primeiro segmento: adicionar semicírculo inicial
-      const startCircle: Point[] = [];
-      for (let j = 0; j <= 8; j++) {
-        const angle = Math.PI / 2 + (j / 8) * Math.PI; // π/2 a 3π/2 (semicírculo esquerdo)
-        startCircle.push({
-          x: p1.x + brushRadius * Math.cos(angle),
-          y: p1.y + brushRadius * Math.sin(angle),
-        });
+    outline.push(leftP2);
+
+    // Se não é o último segmento, adicionar arco de transição no canto
+    if (i < pathPoints.length - 2) {
+      const p3 = pathPoints[i + 2];
+      const nextDx = p3.x - p2.x;
+      const nextDy = p3.y - p2.y;
+      const nextLen = Math.sqrt(nextDx * nextDx + nextDy * nextDy);
+
+      if (nextLen > 0) {
+        // Calcular ângulo de mudança de direção
+        const currentAngle = Math.atan2(dy, dx);
+        const nextAngle = Math.atan2(nextDy, nextDx);
+        let angleDiff = nextAngle - currentAngle;
+
+        // Normalizar para -π a π
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+        // Se há mudança de direção significativa (>10°), adicionar arco
+        if (Math.abs(angleDiff) > 0.174) { // ~10 graus
+          const arcSegments = Math.ceil(Math.abs(angleDiff) / (Math.PI / 20));
+          for (let j = 1; j <= arcSegments; j++) {
+            const t = j / (arcSegments + 1);
+            const arcAngle = currentAngle + Math.PI / 2 + t * angleDiff;
+            outline.push({
+              x: p2.x + brushRadius * Math.cos(arcAngle),
+              y: p2.y + brushRadius * Math.sin(arcAngle),
+            });
+          }
+        }
       }
-      leftSide.push(...startCircle);
-    } else {
-      leftSide.push(leftP1);
-    }
-
-    leftSide.push(leftP2);
-    rightSide.unshift(rightP2); // Adicionar no início para ordem reversa
-    if (i === 0) {
-      rightSide.unshift(rightP1);
     }
   }
 
   // Adicionar semicírculo final
   const lastPoint = pathPoints[pathPoints.length - 1];
   const secondLastPoint = pathPoints[pathPoints.length - 2];
-  const dx = lastPoint.x - secondLastPoint.x;
-  const dy = lastPoint.y - secondLastPoint.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
+  const lastDx = lastPoint.x - secondLastPoint.x;
+  const lastDy = lastPoint.y - secondLastPoint.y;
+  const lastAngle = Math.atan2(lastDy, lastDx);
 
-  if (len > 0) {
-    const angle0 = Math.atan2(dy, dx);
-    const endCircle: Point[] = [];
-    for (let j = 0; j <= 8; j++) {
-      const angle = angle0 - Math.PI / 2 + (j / 8) * Math.PI; // Semicírculo direito
-      endCircle.push({
-        x: lastPoint.x + brushRadius * Math.cos(angle),
-        y: lastPoint.y + brushRadius * Math.sin(angle),
-      });
-    }
-    leftSide.push(...endCircle);
+  // Semicírculo final (20 segmentos)
+  for (let i = 0; i <= 20; i++) {
+    const angle = lastAngle - Math.PI / 2 + (i / 20) * Math.PI;
+    outline.push({
+      x: lastPoint.x + brushRadius * Math.cos(angle),
+      y: lastPoint.y + brushRadius * Math.sin(angle),
+    });
   }
 
-  // Combinar lado esquerdo + lado direito (reverso)
-  return [...leftSide, ...rightSide];
+  // Lado direito em ordem reversa
+  for (let i = pathPoints.length - 1; i >= 0; i--) {
+    const point = pathPoints[i];
+
+    let dx, dy, len;
+    if (i > 0) {
+      dx = point.x - pathPoints[i - 1].x;
+      dy = point.y - pathPoints[i - 1].y;
+    } else {
+      dx = pathPoints[1].x - point.x;
+      dy = pathPoints[1].y - point.y;
+    }
+
+    len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) continue;
+
+    const perpX = -dy / len;
+    const perpY = dx / len;
+
+    const rightP = {
+      x: point.x - perpX * brushRadius,
+      y: point.y - perpY * brushRadius,
+    };
+
+    outline.push(rightP);
+
+    // Adicionar arco de transição no lado direito
+    if (i > 0 && i < pathPoints.length - 1) {
+      const prevPoint = pathPoints[i - 1];
+      const nextPoint = pathPoints[i + 1];
+
+      const prevDx = point.x - prevPoint.x;
+      const prevDy = point.y - prevPoint.y;
+      const nextDx = nextPoint.x - point.x;
+      const nextDy = nextPoint.y - point.y;
+
+      const prevAngle = Math.atan2(prevDy, prevDx);
+      const nextAngle = Math.atan2(nextDy, nextDx);
+
+      let angleDiff = nextAngle - prevAngle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+      if (Math.abs(angleDiff) > 0.174) {
+        const arcSegments = Math.ceil(Math.abs(angleDiff) / (Math.PI / 20));
+        for (let j = 1; j <= arcSegments; j++) {
+          const t = j / (arcSegments + 1);
+          const arcAngle = prevAngle - Math.PI / 2 - t * angleDiff;
+          outline.push({
+            x: point.x + brushRadius * Math.cos(arcAngle),
+            y: point.y + brushRadius * Math.sin(arcAngle),
+          });
+        }
+      }
+    }
+  }
+
+  return outline;
 }
 
 /**
