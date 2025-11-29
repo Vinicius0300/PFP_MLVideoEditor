@@ -33,34 +33,45 @@ export function VideoPlayer() {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !state.isPlaying) return;
+    if (!video || !state.videoMetadata) return;
 
-    const updateFrame = () => {
-      if (!state.videoMetadata) return;
+    if (state.isPlaying) {
+      const updateFrame = () => {
+        const frameNumber = Math.floor(
+          video.currentTime * state.videoMetadata!.frameRate
+        );
 
-      const frameNumber = Math.floor(
-        video.currentTime * state.videoMetadata.frameRate
-      );
+        if (frameNumber !== state.currentFrame) {
+          dispatch({ type: 'SET_CURRENT_FRAME', payload: frameNumber });
+        }
 
-      if (frameNumber !== state.currentFrame) {
-        dispatch({ type: 'SET_CURRENT_FRAME', payload: frameNumber });
-      }
+        if (!video.paused && !video.ended) {
+          animationFrameRef.current = requestAnimationFrame(updateFrame);
+        } else {
+          // Video acabou ou foi pausado externamente
+          dispatch({ type: 'TOGGLE_PLAY' });
+        }
+      };
 
-      if (!video.paused && !video.ended) {
-        animationFrameRef.current = requestAnimationFrame(updateFrame);
-      }
-    };
+      video.play().catch((err) => {
+        console.error('Erro ao reproduzir vídeo:', err);
+        dispatch({ type: 'TOGGLE_PLAY' });
+      });
 
-    video.play();
-    animationFrameRef.current = requestAnimationFrame(updateFrame);
+      animationFrameRef.current = requestAnimationFrame(updateFrame);
 
-    return () => {
+      return () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
+    } else {
+      video.pause();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      video.pause();
-    };
-  }, [state.isPlaying, state.videoMetadata, state.currentFrame, dispatch]);
+    }
+  }, [state.isPlaying, state.videoMetadata, dispatch]);
 
   const handlePlayPause = () => {
     dispatch({ type: 'TOGGLE_PLAY' });
@@ -68,6 +79,12 @@ export function VideoPlayer() {
 
   const handleNextFrame = () => {
     if (!state.videoMetadata) return;
+
+    // Pausar vídeo se estiver tocando
+    if (state.isPlaying) {
+      dispatch({ type: 'TOGGLE_PLAY' });
+    }
+
     const nextFrame = Math.min(
       state.currentFrame + 1,
       state.videoMetadata.totalFrames - 1
@@ -76,11 +93,21 @@ export function VideoPlayer() {
   };
 
   const handlePreviousFrame = () => {
+    // Pausar vídeo se estiver tocando
+    if (state.isPlaying) {
+      dispatch({ type: 'TOGGLE_PLAY' });
+    }
+
     const prevFrame = Math.max(state.currentFrame - 1, 0);
     dispatch({ type: 'SET_CURRENT_FRAME', payload: prevFrame });
   };
 
   const handleSliderChange = (_: Event, value: number | number[]) => {
+    // Pausar vídeo se estiver tocando
+    if (state.isPlaying) {
+      dispatch({ type: 'TOGGLE_PLAY' });
+    }
+
     dispatch({ type: 'SET_CURRENT_FRAME', payload: value as number });
   };
 
