@@ -2,13 +2,12 @@ import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { AppProvider, useApp } from './contexts/AppContext';
 import { Box, Container, AppBar, Toolbar, Typography, Stack, Button, Chip } from '@mui/material';
 import { VideoUpload } from './components/VideoUpload';
-import { VideoPlayer } from './components/VideoPlayer';
-import { AnnotationCanvas } from './components/AnnotationCanvas';
+import { VideoPlayerWithCanvas } from './components/VideoPlayerWithCanvas';
 import { ToolBar } from './components/ToolBar';
 import { FramesSidebar } from './components/FramesSidebar';
 import { VideoLibrary } from '@mui/icons-material';
 
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 
 const theme = createTheme({
   palette: {
@@ -77,9 +76,8 @@ function AppContent() {
               <ToolBar />
             </Box>
 
-            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <VideoPlayer />
-              <AnnotationCanvas />
+            <Box sx={{ flexGrow: 1 }}>
+              <VideoPlayerWithCanvas />
             </Box>
 
             <Box sx={{ width: '300px', flexShrink: 0 }}>
