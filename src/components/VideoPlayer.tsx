@@ -36,39 +36,52 @@ export function VideoPlayer() {
     if (!video || !state.videoMetadata) return;
 
     if (state.isPlaying) {
+      let isActive = true;
+
       const updateFrame = () => {
+        if (!isActive || !state.videoMetadata) return;
+
         const frameNumber = Math.floor(
-          video.currentTime * state.videoMetadata!.frameRate
+          video.currentTime * state.videoMetadata.frameRate
         );
 
         if (frameNumber !== state.currentFrame) {
           dispatch({ type: 'SET_CURRENT_FRAME', payload: frameNumber });
         }
 
-        if (!video.paused && !video.ended) {
+        if (!video.paused && !video.ended && isActive) {
           animationFrameRef.current = requestAnimationFrame(updateFrame);
-        } else {
-          // Video acabou ou foi pausado externamente
+        } else if (video.ended) {
+          // Video acabou
           dispatch({ type: 'TOGGLE_PLAY' });
         }
       };
 
-      video.play().catch((err) => {
-        console.error('Erro ao reproduzir vídeo:', err);
-        dispatch({ type: 'TOGGLE_PLAY' });
-      });
-
-      animationFrameRef.current = requestAnimationFrame(updateFrame);
+      // Esperar o play resolver antes de iniciar o loop
+      video.play()
+        .then(() => {
+          if (isActive) {
+            animationFrameRef.current = requestAnimationFrame(updateFrame);
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao reproduzir vídeo:', err);
+          dispatch({ type: 'TOGGLE_PLAY' });
+        });
 
       return () => {
+        isActive = false;
+        video.pause();
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
       };
     } else {
+      // Garantir que o vídeo está pausado
       video.pause();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
       }
     }
   }, [state.isPlaying, state.videoMetadata, dispatch]);
