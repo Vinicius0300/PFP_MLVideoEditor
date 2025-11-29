@@ -7,6 +7,9 @@ import {
   SkipNext,
   SkipPrevious,
   Bookmark,
+  ZoomIn,
+  ZoomOut,
+  ZoomOutMap,
 } from '@mui/icons-material';
 import { useApp } from '../contexts/AppContext';
 import type {
@@ -26,6 +29,7 @@ export function VideoPlayerWithCanvas() {
   const { state, dispatch } = useApp();
   const videoRef = useRef<HTMLVideoElement>(null);
   const layerRef = useRef<Konva.Layer>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [currentDrawing, setCurrentDrawing] = useState<Point[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -384,6 +388,132 @@ export function VideoPlayerWithCanvas() {
     setCurrentDrawing([]);
   };
 
+  // Handlers para drag & drop
+  const handlePointDragEnd = (frameId: string, annotationId: string, pointId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    const newX = e.target.x() / dimensions.width;
+    const newY = e.target.y() / dimensions.height;
+
+    const frame = state.framesOfInterest.find(f => f.id === frameId);
+    if (!frame) return;
+
+    const annotation = frame.annotations.find(a => a.id === annotationId);
+    if (!annotation || annotation.type !== 'points') return;
+
+    const pointsData = annotation.data as PointsAnnotation;
+    const updatedPoints = pointsData.points.map(p =>
+      p.id === pointId ? { ...p, x: newX, y: newY } : p
+    );
+
+    dispatch({
+      type: 'UPDATE_ANNOTATION',
+      payload: {
+        frameId,
+        annotationId,
+        updates: {
+          data: {
+            type: 'points',
+            points: updatedPoints,
+          },
+        },
+      },
+    });
+  };
+
+  const handleLineDragEnd = (frameId: string, annotationId: string, lineId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    const deltaX = e.target.x() / dimensions.width;
+    const deltaY = e.target.y() / dimensions.height;
+
+    const frame = state.framesOfInterest.find(f => f.id === frameId);
+    if (!frame) return;
+
+    const annotation = frame.annotations.find(a => a.id === annotationId);
+    if (!annotation || annotation.type !== 'lines') return;
+
+    const linesData = annotation.data as LinesAnnotation;
+    const line = linesData.lines.find(l => l.id === lineId);
+    if (!line) return;
+
+    const newP1 = { x: line.p1.x + deltaX, y: line.p1.y + deltaY };
+    const newP2 = { x: line.p2.x + deltaX, y: line.p2.y + deltaY };
+    const dx = newP2.x - newP1.x;
+    const dy = newP2.y - newP1.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+    const updatedLines = linesData.lines.map(l =>
+      l.id === lineId
+        ? { ...l, p1: newP1, p2: newP2, length, angle }
+        : l
+    );
+
+    dispatch({
+      type: 'UPDATE_ANNOTATION',
+      payload: {
+        frameId,
+        annotationId,
+        updates: {
+          data: {
+            type: 'lines',
+            lines: updatedLines,
+          },
+        },
+      },
+    });
+
+    // Reset position do Group
+    e.target.position({ x: 0, y: 0 });
+  };
+
+  const handleMaskDragEnd = (frameId: string, annotationId: string, e: Konva.KonvaEventObject<DragEvent>) => {
+    const deltaX = e.target.x() / dimensions.width;
+    const deltaY = e.target.y() / dimensions.height;
+
+    const frame = state.framesOfInterest.find(f => f.id === frameId);
+    if (!frame) return;
+
+    const annotation = frame.annotations.find(a => a.id === annotationId);
+    if (!annotation || annotation.type !== 'masks') return;
+
+    const masksData = annotation.data as MasksAnnotation;
+
+    // Mover todos os paths
+    const updatedPaths = masksData.paths.map(path => ({
+      ...path,
+      points: path.points.map(p => ({
+        x: p.x + deltaX,
+        y: p.y + deltaY,
+      })),
+    }));
+
+    // Mover polígono unificado se existir
+    const updatedUnified = masksData.unified
+      ? masksData.unified.map(ring =>
+          ring.map(p => ({
+            x: p.x + deltaX,
+            y: p.y + deltaY,
+          }))
+        )
+      : null;
+
+    dispatch({
+      type: 'UPDATE_ANNOTATION',
+      payload: {
+        frameId,
+        annotationId,
+        updates: {
+          data: {
+            type: 'masks',
+            paths: updatedPaths,
+            unified: updatedUnified,
+          },
+        },
+      },
+    });
+
+    // Reset position do Group
+    e.target.position({ x: 0, y: 0 });
+  };
+
   const renderAnnotation = (annotation: Annotation): React.ReactElement | null => {
     if (!annotation.visible) return null;
 
@@ -391,16 +521,21 @@ export function VideoPlayerWithCanvas() {
 
     if (annotation.type === 'points') {
       const pointsData = annotation.data as PointsAnnotation;
+      const frameId = getCurrentFrameOfInterest()?.id;
+      if (!frameId) return null;
+
       pointsData.points.forEach((point: PointData) => {
         elements.push(
           <Circle
             key={point.id}
             x={point.x * dimensions.width}
             y={point.y * dimensions.height}
-            radius={5}
+            radius={5 / state.zoomLevel} // Tamanho fixo independente do zoom
             fill="#00ff00"
             stroke="#00ff00"
-            strokeWidth={2}
+            strokeWidth={2 / state.zoomLevel}
+            draggable={state.currentTool === 'select'}
+            onDragEnd={(e) => handlePointDragEnd(frameId, annotation.id, point.id, e)}
           />
         );
       });
@@ -408,6 +543,9 @@ export function VideoPlayerWithCanvas() {
 
     if (annotation.type === 'lines') {
       const linesData = annotation.data as LinesAnnotation;
+      const frameId = getCurrentFrameOfInterest()?.id;
+      if (!frameId) return null;
+
       linesData.lines.forEach((line: LineData) => {
         const points = [
           line.p1.x * dimensions.width,
@@ -416,18 +554,27 @@ export function VideoPlayerWithCanvas() {
           line.p2.y * dimensions.height,
         ];
         elements.push(
-          <Line
+          <Group
             key={line.id}
-            points={points}
-            stroke="#00ff00"
-            strokeWidth={2}
-          />
+            draggable={state.currentTool === 'select'}
+            onDragEnd={(e) => handleLineDragEnd(frameId, annotation.id, line.id, e)}
+          >
+            <Line
+              points={points}
+              stroke="#00ff00"
+              strokeWidth={2 / state.zoomLevel} // Tamanho fixo independente do zoom
+            />
+          </Group>
         );
       });
     }
 
     if (annotation.type === 'masks') {
       const masksData = annotation.data as MasksAnnotation;
+      const frameId = getCurrentFrameOfInterest()?.id;
+      if (!frameId) return null;
+
+      const maskElements: React.ReactElement[] = [];
 
       // Se temos polígono unificado, renderizar apenas ele
       if (masksData.unified && masksData.unified.length > 0) {
@@ -441,12 +588,12 @@ export function VideoPlayerWithCanvas() {
           // O primeiro ring é o exterior (verde), os demais são buracos (vermelhos)
           const isExterior = ringIndex === 0;
 
-          elements.push(
+          maskElements.push(
             <Line
               key={`unified-ring-${ringIndex}`}
               points={points}
               stroke={isExterior ? '#00ff00' : '#ff0000'}
-              strokeWidth={2}
+              strokeWidth={2 / state.zoomLevel} // Tamanho fixo independente do zoom
               closed={true}
             />
           );
@@ -474,20 +621,43 @@ export function VideoPlayerWithCanvas() {
 
           const color = state.brushMode === 'subtract' ? '#ff0000' : '#00ff00';
 
-          elements.push(
+          maskElements.push(
             <Line
               key={path.id}
               points={points}
               stroke={color}
-              strokeWidth={2}
+              strokeWidth={2 / state.zoomLevel} // Tamanho fixo independente do zoom
               closed={true} // Tanto brush quanto freehand são polígonos fechados
             />
           );
         });
       }
+
+      // Agrupar todos os elementos da máscara para permitir drag
+      elements.push(
+        <Group
+          key={`mask-${annotation.id}`}
+          draggable={state.currentTool === 'select'}
+          onDragEnd={(e) => handleMaskDragEnd(frameId, annotation.id, e)}
+        >
+          {maskElements}
+        </Group>
+      );
     }
 
     return <Group key={annotation.id}>{elements}</Group>;
+  };
+
+  const handleZoomIn = () => {
+    dispatch({ type: 'SET_ZOOM', payload: Math.min(state.zoomLevel + 0.25, 3) });
+  };
+
+  const handleZoomOut = () => {
+    dispatch({ type: 'SET_ZOOM', payload: Math.max(state.zoomLevel - 0.25, 0.5) });
+  };
+
+  const handleResetZoom = () => {
+    dispatch({ type: 'SET_ZOOM', payload: 1 });
   };
 
   const handlePlayPause = () => {
@@ -583,10 +753,20 @@ export function VideoPlayerWithCanvas() {
         />
 
         {/* Canvas com vídeo e geometrias */}
-        <Box sx={{ position: 'relative', bgcolor: 'black', borderRadius: 1, mb: 2 }}>
+        <Box sx={{
+          position: 'relative',
+          bgcolor: 'black',
+          borderRadius: 1,
+          mb: 2,
+          overflow: 'auto',
+          maxHeight: '70vh',
+        }}>
           <Stage
-            width={dimensions.width}
-            height={dimensions.height}
+            ref={stageRef}
+            width={dimensions.width * state.zoomLevel}
+            height={dimensions.height * state.zoomLevel}
+            scaleX={state.zoomLevel}
+            scaleY={state.zoomLevel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -691,6 +871,30 @@ export function VideoPlayerWithCanvas() {
             <Tooltip title="Salvar como frame de interesse">
               <IconButton onClick={handleSaveFrame} color="secondary">
                 <Bookmark />
+              </IconButton>
+            </Tooltip>
+
+            <Box sx={{ borderLeft: 1, borderColor: 'divider', pl: 2, ml: 2 }} />
+
+            <Tooltip title="Diminuir zoom">
+              <IconButton onClick={handleZoomOut} disabled={state.zoomLevel <= 0.5}>
+                <ZoomOut />
+              </IconButton>
+            </Tooltip>
+
+            <Typography variant="body2" sx={{ minWidth: 60, textAlign: 'center' }}>
+              {Math.round(state.zoomLevel * 100)}%
+            </Typography>
+
+            <Tooltip title="Aumentar zoom">
+              <IconButton onClick={handleZoomIn} disabled={state.zoomLevel >= 3}>
+                <ZoomIn />
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Reset zoom (100%)">
+              <IconButton onClick={handleResetZoom} size="small">
+                <ZoomOutMap />
               </IconButton>
             </Tooltip>
           </Stack>
