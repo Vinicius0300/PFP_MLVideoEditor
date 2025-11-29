@@ -9,7 +9,16 @@ import {
   Bookmark,
 } from '@mui/icons-material';
 import { useApp } from '../contexts/AppContext';
-import type { Geometry, Point } from '../types';
+import type {
+  Point,
+  Annotation,
+  PointData,
+  LineData,
+  MaskPath,
+  PointsAnnotation,
+  LinesAnnotation,
+  MasksAnnotation
+} from '../types';
 import Konva from 'konva';
 
 export function VideoPlayerWithCanvas() {
@@ -157,27 +166,54 @@ export function VideoPlayerWithCanvas() {
           name: `Frame ${state.currentFrame}`,
           frameNumber: state.currentFrame,
           timestamp: state.currentFrame / (state.videoMetadata?.frameRate || 30),
-          geometries: [],
+          annotations: [],
           visible: true,
         };
         dispatch({ type: 'ADD_FRAME_OF_INTEREST', payload: frameOfInterest });
       }
 
-      const geometry: Geometry = {
-        id: `geo-${Date.now()}`,
-        type: 'point',
-        name: `ponto-${frameOfInterest.geometries.length + 1}`,
-        frameId: frameOfInterest.id,
-        visible: true,
-        points: [point],
-        color: '#00ff00',
-        strokeWidth: 2,
-      };
+      // Check if points annotation already exists
+      let pointsAnnotation = frameOfInterest.annotations.find(
+        (ann) => ann.type === 'points'
+      );
 
-      dispatch({
-        type: 'ADD_GEOMETRY',
-        payload: { frameId: frameOfInterest.id, geometry },
-      });
+      if (!pointsAnnotation) {
+        // Create new points annotation
+        const annotation: Annotation = {
+          id: `ann-points-${Date.now()}`,
+          type: 'points',
+          name: 'Pontos',
+          frameId: frameOfInterest.id,
+          visible: true,
+          isEditing: true,
+          data: {
+            type: 'points',
+            points: [],
+          },
+        };
+        dispatch({
+          type: 'ADD_ANNOTATION',
+          payload: { frameId: frameOfInterest.id, annotation },
+        });
+        pointsAnnotation = annotation;
+      }
+
+      // Add point to annotation (if in edit mode or just created)
+      if (pointsAnnotation.isEditing) {
+        const newPoint: PointData = {
+          id: `point-${Date.now()}`,
+          x: point.x,
+          y: point.y,
+        };
+        dispatch({
+          type: 'ADD_POINT_TO_ANNOTATION',
+          payload: {
+            frameId: frameOfInterest.id,
+            annotationId: pointsAnnotation.id,
+            point: newPoint,
+          },
+        });
+      }
 
       return;
     }
@@ -216,86 +252,188 @@ export function VideoPlayerWithCanvas() {
         name: `Frame ${state.currentFrame}`,
         frameNumber: state.currentFrame,
         timestamp: state.currentFrame / (state.videoMetadata?.frameRate || 30),
-        geometries: [],
+        annotations: [],
         visible: true,
       };
       dispatch({ type: 'ADD_FRAME_OF_INTEREST', payload: frameOfInterest });
     }
 
-    const geometryType =
-      state.currentTool === 'line'
-        ? 'line'
-        : state.currentTool === 'brush'
-        ? 'brush'
-        : 'freehand';
+    if (state.currentTool === 'line') {
+      if (currentDrawing.length < 2) {
+        setIsDrawing(false);
+        setCurrentDrawing([]);
+        return;
+      }
 
-    const geometry: Geometry = {
-      id: `geo-${Date.now()}`,
-      type: geometryType,
-      name: `${geometryType}-${frameOfInterest.geometries.length + 1}`,
-      frameId: frameOfInterest.id,
-      visible: true,
-      points: currentDrawing,
-      color: state.currentTool === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00',
-      strokeWidth: state.currentTool === 'brush' ? 10 : 2,
-      closed: state.currentTool === 'freehand',
-    };
+      // Check if lines annotation exists
+      let linesAnnotation = frameOfInterest.annotations.find(
+        (ann) => ann.type === 'lines'
+      );
 
-    dispatch({
-      type: 'ADD_GEOMETRY',
-      payload: { frameId: frameOfInterest.id, geometry },
-    });
+      if (!linesAnnotation) {
+        const annotation: Annotation = {
+          id: `ann-lines-${Date.now()}`,
+          type: 'lines',
+          name: 'Retas',
+          frameId: frameOfInterest.id,
+          visible: true,
+          isEditing: true,
+          data: {
+            type: 'lines',
+            lines: [],
+          },
+        };
+        dispatch({
+          type: 'ADD_ANNOTATION',
+          payload: { frameId: frameOfInterest.id, annotation },
+        });
+        linesAnnotation = annotation;
+      }
+
+      if (linesAnnotation.isEditing) {
+        // Calculate length and angle
+        const dx = currentDrawing[1].x - currentDrawing[0].x;
+        const dy = currentDrawing[1].y - currentDrawing[0].y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+        const newLine: LineData = {
+          id: `line-${Date.now()}`,
+          p1: currentDrawing[0],
+          p2: currentDrawing[1],
+          length,
+          angle,
+        };
+
+        dispatch({
+          type: 'ADD_LINE_TO_ANNOTATION',
+          payload: {
+            frameId: frameOfInterest.id,
+            annotationId: linesAnnotation.id,
+            line: newLine,
+          },
+        });
+      }
+    } else if (state.currentTool === 'freehand' || state.currentTool === 'brush') {
+      // Check if masks annotation exists
+      let masksAnnotation = frameOfInterest.annotations.find(
+        (ann) => ann.type === 'masks'
+      );
+
+      if (!masksAnnotation) {
+        const annotation: Annotation = {
+          id: `ann-masks-${Date.now()}`,
+          type: 'masks',
+          name: 'Máscaras',
+          frameId: frameOfInterest.id,
+          visible: true,
+          isEditing: true,
+          data: {
+            type: 'masks',
+            paths: [],
+            unified: null,
+          },
+        };
+        dispatch({
+          type: 'ADD_ANNOTATION',
+          payload: { frameId: frameOfInterest.id, annotation },
+        });
+        masksAnnotation = annotation;
+      }
+
+      if (masksAnnotation.isEditing) {
+        const newPath: MaskPath = {
+          id: `path-${Date.now()}`,
+          points: currentDrawing,
+          type: state.currentTool === 'brush' ? 'brush' : 'freehand',
+        };
+
+        dispatch({
+          type: 'ADD_MASK_PATH_TO_ANNOTATION',
+          payload: {
+            frameId: frameOfInterest.id,
+            annotationId: masksAnnotation.id,
+            path: newPath,
+          },
+        });
+
+        // TODO: Trigger mask union calculation here
+      }
+    }
 
     setIsDrawing(false);
     setCurrentDrawing([]);
   };
 
-  const renderGeometry = (geometry: Geometry) => {
-    if (!geometry.visible) return null;
+  const renderAnnotation = (annotation: Annotation): React.ReactElement | null => {
+    if (!annotation.visible) return null;
 
-    const points = geometry.points.flatMap((p) => [
-      p.x * dimensions.width,
-      p.y * dimensions.height,
-    ]);
+    const elements: React.ReactElement[] = [];
 
-    if (geometry.type === 'point') {
-      return (
-        <Circle
-          key={geometry.id}
-          x={geometry.points[0].x * dimensions.width}
-          y={geometry.points[0].y * dimensions.height}
-          radius={5}
-          fill={geometry.color}
-          stroke={geometry.color}
-          strokeWidth={2}
-        />
-      );
+    if (annotation.type === 'points') {
+      const pointsData = annotation.data as PointsAnnotation;
+      pointsData.points.forEach((point: PointData) => {
+        elements.push(
+          <Circle
+            key={point.id}
+            x={point.x * dimensions.width}
+            y={point.y * dimensions.height}
+            radius={5}
+            fill="#00ff00"
+            stroke="#00ff00"
+            strokeWidth={2}
+          />
+        );
+      });
     }
 
-    if (geometry.type === 'line') {
-      return (
-        <Line
-          key={geometry.id}
-          points={points}
-          stroke={geometry.color}
-          strokeWidth={geometry.strokeWidth || 2}
-        />
-      );
+    if (annotation.type === 'lines') {
+      const linesData = annotation.data as LinesAnnotation;
+      linesData.lines.forEach((line: LineData) => {
+        const points = [
+          line.p1.x * dimensions.width,
+          line.p1.y * dimensions.height,
+          line.p2.x * dimensions.width,
+          line.p2.y * dimensions.height,
+        ];
+        elements.push(
+          <Line
+            key={line.id}
+            points={points}
+            stroke="#00ff00"
+            strokeWidth={2}
+          />
+        );
+      });
     }
 
-    if (geometry.type === 'freehand' || geometry.type === 'brush') {
-      return (
-        <Line
-          key={geometry.id}
-          points={points}
-          stroke={geometry.color}
-          strokeWidth={geometry.strokeWidth || 2}
-          closed={geometry.closed}
-        />
-      );
+    if (annotation.type === 'masks') {
+      const masksData = annotation.data as MasksAnnotation;
+      // Render individual paths (before union)
+      masksData.paths.forEach((path: MaskPath) => {
+        const points = path.points.flatMap((p: Point) => [
+          p.x * dimensions.width,
+          p.y * dimensions.height,
+        ]);
+        const color = path.type === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00';
+        elements.push(
+          <Line
+            key={path.id}
+            points={points}
+            stroke={color}
+            strokeWidth={path.type === 'brush' ? state.brushSize : 2}
+            closed={path.type === 'freehand'}
+          />
+        );
+      });
+
+      // TODO: Render unified mask when implemented
+      // if (masksData.unified) {
+      //   // Render the unified polygon
+      // }
     }
 
-    return null;
+    return <Group key={annotation.id}>{elements}</Group>;
   };
 
   const handlePlayPause = () => {
@@ -342,7 +480,7 @@ export function VideoPlayerWithCanvas() {
       name: `Frame ${state.currentFrame}`,
       frameNumber: state.currentFrame,
       timestamp: state.currentFrame / state.videoMetadata.frameRate,
-      geometries: [],
+      annotations: [],
       visible: true,
     };
 
@@ -361,7 +499,7 @@ export function VideoPlayerWithCanvas() {
 
   const currentTime = state.currentFrame / state.videoMetadata.frameRate;
   const currentFrameOfInterest = getCurrentFrameOfInterest();
-  const geometries = currentFrameOfInterest?.geometries || [];
+  const annotations = currentFrameOfInterest?.annotations || [];
 
   const currentDrawingPoints = currentDrawing.flatMap((p) => [
     p.x * dimensions.width,
@@ -398,7 +536,7 @@ export function VideoPlayerWithCanvas() {
             </Layer>
             <Layer>
               <Group>
-                {geometries.map((geo) => renderGeometry(geo))}
+                {annotations.map((ann) => renderAnnotation(ann))}
                 {/* Preview durante desenho */}
                 {isDrawing && currentDrawingPoints.length > 0 && (
                   <>

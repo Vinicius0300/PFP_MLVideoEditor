@@ -58,7 +58,7 @@ describe('AppContext', () => {
       name: 'Test Frame',
       frameNumber: 10,
       timestamp: 0.333,
-      geometries: [],
+      annotations: [],
       visible: true,
     };
 
@@ -78,7 +78,7 @@ describe('AppContext', () => {
       name: 'Test Frame',
       frameNumber: 10,
       timestamp: 0.333,
-      geometries: [],
+      annotations: [],
       visible: true,
     };
 

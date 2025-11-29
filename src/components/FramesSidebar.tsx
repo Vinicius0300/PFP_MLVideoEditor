@@ -25,18 +25,17 @@ import {
   Delete,
   Edit,
   ImageOutlined,
-  Circle,
+  Place,
   Timeline,
-  Gesture,
-  Brush,
+  BrushOutlined,
 } from '@mui/icons-material';
 import { useApp } from '../contexts/AppContext';
-import type { FrameOfInterest, Geometry } from '../types';
+import type { FrameOfInterestV2, Annotation } from '../types';
 
 export function FramesSidebar() {
   const { state, dispatch } = useApp();
   const [expandedFrames, setExpandedFrames] = useState<Set<string>>(new Set());
-  const [editingItem, setEditingItem] = useState<{ type: 'frame' | 'geometry'; id: string; frameId?: string } | null>(null);
+  const [editingItem, setEditingItem] = useState<{ type: 'frame' | 'annotation'; id: string; frameId?: string } | null>(null);
   const [newName, setNewName] = useState('');
 
   const toggleFrame = (frameId: string) => {
@@ -54,11 +53,11 @@ export function FramesSidebar() {
     dispatch({ type: 'SET_CURRENT_FRAME', payload: frameNumber });
   };
 
-  const handleGeometrySelect = (geometryId: string) => {
-    dispatch({ type: 'SELECT_GEOMETRY', payload: geometryId });
+  const handleAnnotationSelect = (annotationId: string) => {
+    dispatch({ type: 'SELECT_ANNOTATION', payload: annotationId });
   };
 
-  const handleToggleFrameVisibility = (frame: FrameOfInterest, e: React.MouseEvent) => {
+  const handleToggleFrameVisibility = (frame: FrameOfInterestV2, e: React.MouseEvent) => {
     e.stopPropagation();
     dispatch({
       type: 'UPDATE_FRAME_OF_INTEREST',
@@ -66,14 +65,14 @@ export function FramesSidebar() {
     });
   };
 
-  const handleToggleGeometryVisibility = (frameId: string, geometry: Geometry, e: React.MouseEvent) => {
+  const handleToggleAnnotationVisibility = (frameId: string, annotation: Annotation, e: React.MouseEvent) => {
     e.stopPropagation();
     dispatch({
-      type: 'UPDATE_GEOMETRY',
+      type: 'UPDATE_ANNOTATION',
       payload: {
         frameId,
-        geometryId: geometry.id,
-        updates: { visible: !geometry.visible },
+        annotationId: annotation.id,
+        updates: { visible: !annotation.visible },
       },
     });
   };
@@ -83,21 +82,29 @@ export function FramesSidebar() {
     dispatch({ type: 'DELETE_FRAME_OF_INTEREST', payload: frameId });
   };
 
-  const handleDeleteGeometry = (frameId: string, geometryId: string, e: React.MouseEvent) => {
+  const handleDeleteAnnotation = (frameId: string, annotationId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    dispatch({ type: 'DELETE_GEOMETRY', payload: { frameId, geometryId } });
+    dispatch({ type: 'DELETE_ANNOTATION', payload: { frameId, annotationId } });
   };
 
-  const handleEditFrame = (frame: FrameOfInterest, e: React.MouseEvent) => {
+  const handleEditFrame = (frame: FrameOfInterestV2, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingItem({ type: 'frame', id: frame.id });
     setNewName(frame.name);
   };
 
-  const handleEditGeometry = (frameId: string, geometry: Geometry, e: React.MouseEvent) => {
+  const handleEditAnnotation = (frameId: string, annotation: Annotation, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingItem({ type: 'geometry', id: geometry.id, frameId });
-    setNewName(geometry.name);
+    setEditingItem({ type: 'annotation', id: annotation.id, frameId });
+    setNewName(annotation.name);
+  };
+
+  const handleToggleEditMode = (frameId: string, annotationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    dispatch({
+      type: 'TOGGLE_ANNOTATION_EDIT_MODE',
+      payload: { frameId, annotationId },
+    });
   };
 
   const handleSaveEdit = () => {
@@ -110,10 +117,10 @@ export function FramesSidebar() {
       });
     } else if (editingItem.frameId) {
       dispatch({
-        type: 'UPDATE_GEOMETRY',
+        type: 'UPDATE_ANNOTATION',
         payload: {
           frameId: editingItem.frameId,
-          geometryId: editingItem.id,
+          annotationId: editingItem.id,
           updates: { name: newName },
         },
       });
@@ -123,18 +130,16 @@ export function FramesSidebar() {
     setNewName('');
   };
 
-  const getGeometryIcon = (type: string) => {
+  const getAnnotationIcon = (type: string) => {
     switch (type) {
-      case 'point':
-        return <Circle fontSize="small" />;
-      case 'line':
+      case 'points':
+        return <Place fontSize="small" />;
+      case 'lines':
         return <Timeline fontSize="small" />;
-      case 'freehand':
-        return <Gesture fontSize="small" />;
-      case 'brush':
-        return <Brush fontSize="small" />;
+      case 'masks':
+        return <BrushOutlined fontSize="small" />;
       default:
-        return <Circle fontSize="small" />;
+        return <Place fontSize="small" />;
     }
   };
 
@@ -198,41 +203,48 @@ export function FramesSidebar() {
 
             <Collapse in={expandedFrames.has(frame.id)} timeout="auto" unmountOnExit>
               <List component="div" disablePadding dense>
-                {frame.geometries.map((geometry) => (
+                {frame.annotations.map((annotation) => (
                   <ListItem
-                    key={geometry.id}
+                    key={annotation.id}
                     sx={{
                       pl: 4,
-                      bgcolor: state.selectedGeometryId === geometry.id ? 'action.selected' : 'transparent',
+                      bgcolor: state.selectedAnnotationId === annotation.id ? 'action.selected' : 'transparent',
                     }}
                     secondaryAction={
                       <Stack direction="row" spacing={0.5}>
                         <IconButton
                           size="small"
-                          onClick={(e) => handleToggleGeometryVisibility(frame.id, geometry, e)}
+                          onClick={(e) => handleToggleAnnotationVisibility(frame.id, annotation, e)}
                         >
-                          {geometry.visible ? <Visibility /> : <VisibilityOff />}
+                          {annotation.visible ? <Visibility /> : <VisibilityOff />}
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={(e) => handleEditGeometry(frame.id, geometry, e)}
+                          onClick={(e) => handleEditAnnotation(frame.id, annotation, e)}
                         >
                           <Edit />
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={(e) => handleDeleteGeometry(frame.id, geometry.id, e)}
+                          onClick={(e) => handleToggleEditMode(frame.id, annotation.id, e)}
+                          color={annotation.isEditing ? 'primary' : 'default'}
+                        >
+                          <Edit />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleDeleteAnnotation(frame.id, annotation.id, e)}
                         >
                           <Delete />
                         </IconButton>
                       </Stack>
                     }
                   >
-                    <ListItemButton onClick={() => handleGeometrySelect(geometry.id)}>
-                      <ListItemIcon>{getGeometryIcon(geometry.type)}</ListItemIcon>
+                    <ListItemButton onClick={() => handleAnnotationSelect(annotation.id)}>
+                      <ListItemIcon>{getAnnotationIcon(annotation.type)}</ListItemIcon>
                       <ListItemText
-                        primary={geometry.name}
-                        secondary={geometry.type}
+                        primary={annotation.name}
+                        secondary={`${annotation.type}${annotation.isEditing ? ' (editando)' : ''}`}
                       />
                     </ListItemButton>
                   </ListItem>
@@ -245,7 +257,7 @@ export function FramesSidebar() {
 
       <Dialog open={editingItem !== null} onClose={() => setEditingItem(null)}>
         <DialogTitle>
-          Renomear {editingItem?.type === 'frame' ? 'Frame' : 'Geometria'}
+          Renomear {editingItem?.type === 'frame' ? 'Frame' : 'Marcação'}
         </DialogTitle>
         <DialogContent>
           <TextField
