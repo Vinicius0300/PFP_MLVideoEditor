@@ -20,6 +20,7 @@ import type {
   MasksAnnotation
 } from '../types';
 import Konva from 'konva';
+import { generateBrushOutline, unifyMaskPaths } from '../utils/polygonUtils';
 
 export function VideoPlayerWithCanvas() {
   const { state, dispatch } = useApp();
@@ -348,6 +349,7 @@ export function VideoPlayerWithCanvas() {
           type: state.currentTool === 'brush' ? 'brush' : 'freehand',
         };
 
+        // Adicionar o novo path
         dispatch({
           type: 'ADD_MASK_PATH_TO_ANNOTATION',
           payload: {
@@ -357,7 +359,24 @@ export function VideoPlayerWithCanvas() {
           },
         });
 
-        // TODO: Trigger mask union calculation here
+        // Calcular união de polígonos
+        // Obter todos os paths incluindo o novo
+        const masksData = masksAnnotation.data as MasksAnnotation;
+        const allPaths = [...masksData.paths, newPath];
+
+        // Unificar os polígonos
+        const unified = unifyMaskPaths(allPaths, state.brushSize);
+
+        if (unified) {
+          dispatch({
+            type: 'UPDATE_MASK_UNION',
+            payload: {
+              frameId: frameOfInterest.id,
+              annotationId: masksAnnotation.id,
+              unified,
+            },
+          });
+        }
       }
     }
 
@@ -409,28 +428,63 @@ export function VideoPlayerWithCanvas() {
 
     if (annotation.type === 'masks') {
       const masksData = annotation.data as MasksAnnotation;
-      // Render individual paths (before union)
-      masksData.paths.forEach((path: MaskPath) => {
-        const points = path.points.flatMap((p: Point) => [
-          p.x * dimensions.width,
-          p.y * dimensions.height,
-        ]);
-        const color = path.type === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00';
-        elements.push(
-          <Line
-            key={path.id}
-            points={points}
-            stroke={color}
-            strokeWidth={path.type === 'brush' ? state.brushSize : 2}
-            closed={path.type === 'freehand'}
-          />
-        );
-      });
 
-      // TODO: Render unified mask when implemented
-      // if (masksData.unified) {
-      //   // Render the unified polygon
-      // }
+      // Se temos polígono unificado, renderizar apenas ele
+      if (masksData.unified && masksData.unified.length > 0) {
+        // Renderizar cada ring do polígono unificado
+        masksData.unified.forEach((ring, ringIndex) => {
+          const points = ring.flatMap((p: Point) => [
+            p.x * dimensions.width,
+            p.y * dimensions.height,
+          ]);
+
+          // O primeiro ring é o exterior (verde), os demais são buracos (vermelhos)
+          const isExterior = ringIndex === 0;
+
+          elements.push(
+            <Line
+              key={`unified-ring-${ringIndex}`}
+              points={points}
+              stroke={isExterior ? '#00ff00' : '#ff0000'}
+              strokeWidth={2}
+              closed={true}
+            />
+          );
+        });
+      } else {
+        // Se não tem união ainda, renderizar paths individuais
+        masksData.paths.forEach((path: MaskPath) => {
+          let points: number[];
+
+          if (path.type === 'brush') {
+            // Brush circular: gerar contorno circular
+            const brushRadius = state.brushSize / dimensions.width / 2; // Converter para coordenadas normalizadas
+            const outlinePoints = generateBrushOutline(path.points, brushRadius);
+            points = outlinePoints.flatMap((p: Point) => [
+              p.x * dimensions.width,
+              p.y * dimensions.height,
+            ]);
+          } else {
+            // Freehand: usar pontos diretamente
+            points = path.points.flatMap((p: Point) => [
+              p.x * dimensions.width,
+              p.y * dimensions.height,
+            ]);
+          }
+
+          const color = state.brushMode === 'subtract' ? '#ff0000' : '#00ff00';
+
+          elements.push(
+            <Line
+              key={path.id}
+              points={points}
+              stroke={color}
+              strokeWidth={2}
+              closed={path.type === 'freehand'}
+            />
+          );
+        });
+      }
     }
 
     return <Group key={annotation.id}>{elements}</Group>;
@@ -501,10 +555,23 @@ export function VideoPlayerWithCanvas() {
   const currentFrameOfInterest = getCurrentFrameOfInterest();
   const annotations = currentFrameOfInterest?.annotations || [];
 
-  const currentDrawingPoints = currentDrawing.flatMap((p) => [
-    p.x * dimensions.width,
-    p.y * dimensions.height,
-  ]);
+  // Gerar pontos de preview baseado na ferramenta
+  let currentDrawingPoints: number[] = [];
+  if (state.currentTool === 'brush' && currentDrawing.length > 0) {
+    // Para brush, gerar contorno circular
+    const brushRadius = state.brushSize / dimensions.width / 2;
+    const outlinePoints = generateBrushOutline(currentDrawing, brushRadius);
+    currentDrawingPoints = outlinePoints.flatMap((p) => [
+      p.x * dimensions.width,
+      p.y * dimensions.height,
+    ]);
+  } else {
+    // Para outras ferramentas, usar pontos normalmente
+    currentDrawingPoints = currentDrawing.flatMap((p) => [
+      p.x * dimensions.width,
+      p.y * dimensions.height,
+    ]);
+  }
 
   return (
     <Box ref={containerRef} sx={{ width: '100%' }}>
@@ -565,9 +632,10 @@ export function VideoPlayerWithCanvas() {
                     {(state.currentTool === 'freehand' || state.currentTool === 'brush') && (
                       <Line
                         points={currentDrawingPoints}
-                        stroke={state.currentTool === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00'}
-                        strokeWidth={state.currentTool === 'brush' ? 10 : 2}
+                        stroke={state.brushMode === 'subtract' ? '#ff0000' : '#00ff00'}
+                        strokeWidth={2}
                         closed={state.currentTool === 'freehand'}
+                        dash={[5, 5]}
                         opacity={0.7}
                       />
                     )}
