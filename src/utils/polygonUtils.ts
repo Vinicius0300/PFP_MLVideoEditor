@@ -22,99 +22,90 @@ export function createCircle(center: Point, radius: number, segments = 32): Poin
 
 /**
  * Gera o contorno de um traço de brush circular
- * Cria círculos ao longo do path e retorna os pontos do contorno externo
+ * Cria um polígono contínuo que representa a área pintada pela brush
  * @param pathPoints Pontos do caminho da brush
  * @param brushRadius Raio da brush (em coordenadas normalizadas)
- * @returns Pontos formando o contorno da brush
+ * @returns Pontos formando o contorno da brush (polígono fechado)
  */
 export function generateBrushOutline(pathPoints: Point[], brushRadius: number): Point[] {
   if (pathPoints.length === 0) return [];
+
   if (pathPoints.length === 1) {
     // Apenas um ponto: retorna um círculo
     return createCircle(pathPoints[0], brushRadius);
   }
 
-  // Para múltiplos pontos, criamos círculos ao longo do caminho
-  // e calculamos o envelope (contorno externo)
-  const circles: Point[][] = [];
+  // Para múltiplos pontos, criar contorno como stroke com espessura
+  const leftSide: Point[] = [];
+  const rightSide: Point[] = [];
 
-  // Criar círculos ao longo do path
-  for (let i = 0; i < pathPoints.length; i++) {
-    circles.push(createCircle(pathPoints[i], brushRadius, 16));
-  }
-
-  // Se temos apenas 2 pontos, criamos um contorno simplificado
-  if (pathPoints.length === 2) {
-    const p1 = pathPoints[0];
-    const p2 = pathPoints[1];
+  // Processar cada segmento do path
+  for (let i = 0; i < pathPoints.length - 1; i++) {
+    const p1 = pathPoints[i];
+    const p2 = pathPoints[i + 1];
 
     // Vetor direção
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy);
 
-    if (len === 0) return createCircle(p1, brushRadius);
+    if (len === 0) continue;
 
-    // Vetor perpendicular normalizado
+    // Vetor perpendicular normalizado (aponta para a esquerda)
     const perpX = -dy / len;
     const perpY = dx / len;
 
-    // Criar contorno como um retângulo com extremidades circulares
-    const outline: Point[] = [];
+    // Pontos offset
+    const leftP1 = { x: p1.x + perpX * brushRadius, y: p1.y + perpY * brushRadius };
+    const rightP1 = { x: p1.x - perpX * brushRadius, y: p1.y - perpY * brushRadius };
+    const leftP2 = { x: p2.x + perpX * brushRadius, y: p2.y + perpY * brushRadius };
+    const rightP2 = { x: p2.x - perpX * brushRadius, y: p2.y - perpY * brushRadius };
 
-    // Semicírculo no início (lado direito)
-    for (let i = 0; i <= 8; i++) {
-      const angle = (i / 8) * Math.PI; // 0 a π
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      outline.push({
-        x: p1.x + brushRadius * (perpX * cos - (dx/len) * sin),
-        y: p1.y + brushRadius * (perpY * cos - (dy/len) * sin),
-      });
+    // Adicionar pontos aos lados
+    if (i === 0) {
+      // Primeiro segmento: adicionar semicírculo inicial
+      const startCircle: Point[] = [];
+      for (let j = 0; j <= 8; j++) {
+        const angle = Math.PI / 2 + (j / 8) * Math.PI; // π/2 a 3π/2 (semicírculo esquerdo)
+        startCircle.push({
+          x: p1.x + brushRadius * Math.cos(angle),
+          y: p1.y + brushRadius * Math.sin(angle),
+        });
+      }
+      leftSide.push(...startCircle);
+    } else {
+      leftSide.push(leftP1);
     }
 
-    // Semicírculo no fim (lado esquerdo)
-    for (let i = 0; i <= 8; i++) {
-      const angle = (i / 8) * Math.PI; // 0 a π
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      outline.push({
-        x: p2.x + brushRadius * (-perpX * cos + (dx/len) * sin),
-        y: p2.y + brushRadius * (-perpY * cos + (dy/len) * sin),
-      });
-    }
-
-    return outline;
-  }
-
-  // Para múltiplos pontos, uma abordagem simples:
-  // criar círculos em cada ponto e retornar a união aproximada
-  const allPoints: Point[] = [];
-  circles.forEach(circle => allPoints.push(...circle));
-
-  // Retornar convex hull seria ideal, mas por simplicidade
-  // vamos interpolar círculos entre pontos consecutivos
-  const detailedOutline: Point[] = [];
-
-  for (let i = 0; i < pathPoints.length - 1; i++) {
-    const p1 = pathPoints[i];
-    const p2 = pathPoints[i + 1];
-    const steps = 5; // Interpolação entre pontos
-
-    for (let t = 0; t < steps; t++) {
-      const ratio = t / steps;
-      const interpPoint = {
-        x: p1.x + (p2.x - p1.x) * ratio,
-        y: p1.y + (p2.y - p1.y) * ratio,
-      };
-      detailedOutline.push(...createCircle(interpPoint, brushRadius, 12));
+    leftSide.push(leftP2);
+    rightSide.unshift(rightP2); // Adicionar no início para ordem reversa
+    if (i === 0) {
+      rightSide.unshift(rightP1);
     }
   }
 
-  // Adicionar círculo no último ponto
-  detailedOutline.push(...createCircle(pathPoints[pathPoints.length - 1], brushRadius, 16));
+  // Adicionar semicírculo final
+  const lastPoint = pathPoints[pathPoints.length - 1];
+  const secondLastPoint = pathPoints[pathPoints.length - 2];
+  const dx = lastPoint.x - secondLastPoint.x;
+  const dy = lastPoint.y - secondLastPoint.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
 
-  return detailedOutline;
+  if (len > 0) {
+    const angle0 = Math.atan2(dy, dx);
+    const endCircle: Point[] = [];
+    for (let j = 0; j <= 8; j++) {
+      const angle = angle0 - Math.PI / 2 + (j / 8) * Math.PI; // Semicírculo direito
+      endCircle.push({
+        x: lastPoint.x + brushRadius * Math.cos(angle),
+        y: lastPoint.y + brushRadius * Math.sin(angle),
+      });
+    }
+    leftSide.push(...endCircle);
+  }
+
+  // Combinar lado esquerdo + lado direito (reverso)
+  return [...leftSide, ...rightSide];
 }
 
 /**
@@ -152,21 +143,22 @@ export function unifyMaskPaths(paths: MaskPath[], brushSize: number): Polygon | 
 
       if (path.type === 'brush') {
         // Para brush, gerar contorno circular
+        // Brush já retorna um polígono fechado (com semicírculos nas extremidades)
         const brushRadius = brushSize / 2; // brushSize é o diâmetro em pixels, converter para raio normalizado
         // Nota: assumindo que brushRadius já está em coordenadas normalizadas (0-1)
         // Se estiver em pixels, seria necessário converter
         points = generateBrushOutline(path.points, brushRadius / 1000); // Normalizar para coordenadas 0-1
       } else {
-        // Para freehand, usar pontos diretamente
+        // Para freehand, usar pontos diretamente e fechar o polígono
         points = path.points;
-      }
 
-      // Fechar o polígono se necessário
-      if (points.length > 0) {
-        const first = points[0];
-        const last = points[points.length - 1];
-        if (first.x !== last.x || first.y !== last.y) {
-          points = [...points, first];
+        // Fechar o polígono freehand se necessário (conectar último ao primeiro)
+        if (points.length > 0) {
+          const first = points[0];
+          const last = points[points.length - 1];
+          if (first.x !== last.x || first.y !== last.y) {
+            points = [...points, first];
+          }
         }
       }
 

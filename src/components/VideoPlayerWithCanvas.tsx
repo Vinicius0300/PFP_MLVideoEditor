@@ -480,7 +480,7 @@ export function VideoPlayerWithCanvas() {
               points={points}
               stroke={color}
               strokeWidth={2}
-              closed={path.type === 'freehand'}
+              closed={true} // Tanto brush quanto freehand são polígonos fechados
             />
           );
         });
@@ -634,7 +634,7 @@ export function VideoPlayerWithCanvas() {
                         points={currentDrawingPoints}
                         stroke={state.brushMode === 'subtract' ? '#ff0000' : '#00ff00'}
                         strokeWidth={2}
-                        closed={state.currentTool === 'freehand'}
+                        closed={true} // Brush e freehand são polígonos fechados
                         dash={[5, 5]}
                         opacity={0.7}
                       />
