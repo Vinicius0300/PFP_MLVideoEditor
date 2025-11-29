@@ -15,6 +15,7 @@ import Konva from 'konva';
 export function VideoPlayerWithCanvas() {
   const { state, dispatch } = useApp();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const layerRef = useRef<Konva.Layer>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [currentDrawing, setCurrentDrawing] = useState<Point[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -50,18 +51,21 @@ export function VideoPlayerWithCanvas() {
     return () => window.removeEventListener('resize', updateDimensions);
   }, [state.videoMetadata]);
 
-  // Sincronizar currentTime quando pausado
+  // Sincronizar currentTime e forçar redraw do canvas
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !state.videoMetadata) return;
-
-    if (state.isPlaying) return;
 
     const frameTime = 1 / state.videoMetadata.frameRate;
     const targetTime = state.currentFrame * frameTime;
 
     video.currentTime = targetTime;
-  }, [state.currentFrame, state.videoMetadata, state.isPlaying]);
+
+    // Forçar redraw do layer de vídeo quando o frame muda
+    if (layerRef.current) {
+      layerRef.current.batchDraw();
+    }
+  }, [state.currentFrame, state.videoMetadata]);
 
   // Controle de Play/Pause
   useEffect(() => {
@@ -277,7 +281,6 @@ export function VideoPlayerWithCanvas() {
           stroke={geometry.color}
           strokeWidth={geometry.strokeWidth || 2}
           closed={geometry.closed}
-          fill={geometry.closed ? geometry.color + '40' : undefined}
         />
       );
     }
@@ -373,7 +376,7 @@ export function VideoPlayerWithCanvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           >
-            <Layer>
+            <Layer ref={layerRef}>
               {/* Vídeo como imagem de fundo */}
               {videoImage && (
                 <KonvaImage

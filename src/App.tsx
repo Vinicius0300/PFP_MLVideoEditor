@@ -1,13 +1,13 @@
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { AppProvider, useApp } from './contexts/AppContext';
-import { Box, Container, AppBar, Toolbar, Typography, Stack, Button, Chip } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Stack, Button, Chip } from '@mui/material';
 import { VideoUpload } from './components/VideoUpload';
 import { VideoPlayerWithCanvas } from './components/VideoPlayerWithCanvas';
 import { ToolBar } from './components/ToolBar';
 import { FramesSidebar } from './components/FramesSidebar';
 import { VideoLibrary } from '@mui/icons-material';
 
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.0.6';
 
 const theme = createTheme({
   palette: {
@@ -58,7 +58,7 @@ function AppContent() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 3, mb: 3, flexGrow: 1 }}>
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         {!state.videoUrl ? (
           <Box
             sx={{
@@ -71,21 +71,21 @@ function AppContent() {
             <VideoUpload />
           </Box>
         ) : (
-          <Stack direction="row" spacing={2} sx={{ width: '100%' }}>
+          <Stack direction="row" spacing={2} sx={{ flexGrow: 1, p: 2 }}>
             <Box sx={{ width: '200px', flexShrink: 0 }}>
               <ToolBar />
             </Box>
 
-            <Box sx={{ flexGrow: 1 }}>
+            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               <VideoPlayerWithCanvas />
             </Box>
 
-            <Box sx={{ width: '300px', flexShrink: 0 }}>
+            <Box sx={{ width: '300px', flexShrink: 0, overflow: 'auto' }}>
               <FramesSidebar />
             </Box>
           </Stack>
         )}
-      </Container>
+      </Box>
     </Box>
   );
 }

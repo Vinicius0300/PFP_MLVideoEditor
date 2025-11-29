@@ -80,16 +80,12 @@ export function FramesSidebar() {
 
   const handleDeleteFrame = (frameId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Deseja realmente deletar este frame e todas as suas geometrias?')) {
-      dispatch({ type: 'DELETE_FRAME_OF_INTEREST', payload: frameId });
-    }
+    dispatch({ type: 'DELETE_FRAME_OF_INTEREST', payload: frameId });
   };
 
   const handleDeleteGeometry = (frameId: string, geometryId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Deseja realmente deletar esta geometria?')) {
-      dispatch({ type: 'DELETE_GEOMETRY', payload: { frameId, geometryId } });
-    }
+    dispatch({ type: 'DELETE_GEOMETRY', payload: { frameId, geometryId } });
   };
 
   const handleEditFrame = (frame: FrameOfInterest, e: React.MouseEvent) => {
