@@ -1,12 +1,14 @@
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { AppProvider, useApp } from './contexts/AppContext';
-import { Box, Container, AppBar, Toolbar, Typography, Stack, Button } from '@mui/material';
+import { Box, Container, AppBar, Toolbar, Typography, Stack, Button, Chip } from '@mui/material';
 import { VideoUpload } from './components/VideoUpload';
 import { VideoPlayer } from './components/VideoPlayer';
 import { AnnotationCanvas } from './components/AnnotationCanvas';
 import { ToolBar } from './components/ToolBar';
 import { FramesSidebar } from './components/FramesSidebar';
 import { VideoLibrary } from '@mui/icons-material';
+
+const APP_VERSION = '1.0.4';
 
 const theme = createTheme({
   palette: {
@@ -33,8 +35,17 @@ function AppContent() {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
             VideoML Editor - Análise de Vídeos Médicos
+            <Chip
+              label={`v${APP_VERSION}`}
+              size="small"
+              sx={{
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                fontWeight: 'bold'
+              }}
+            />
           </Typography>
           {state.videoUrl && (
             <Button

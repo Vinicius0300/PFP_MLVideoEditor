@@ -49,6 +49,43 @@ export function AnnotationCanvas() {
       y: pos.y / dimensions.height,
     };
 
+    // Para PONTOS: criar imediatamente sem esperar mouseUp
+    if (state.currentTool === 'point') {
+      let frameOfInterest = getCurrentFrameOfInterest();
+
+      if (!frameOfInterest) {
+        const frameId = `frame-${Date.now()}`;
+        frameOfInterest = {
+          id: frameId,
+          name: `Frame ${state.currentFrame}`,
+          frameNumber: state.currentFrame,
+          timestamp: state.currentFrame / (state.videoMetadata?.frameRate || 30),
+          geometries: [],
+          visible: true,
+        };
+        dispatch({ type: 'ADD_FRAME_OF_INTEREST', payload: frameOfInterest });
+      }
+
+      const geometry: Geometry = {
+        id: `geo-${Date.now()}`,
+        type: 'point',
+        name: `ponto-${frameOfInterest.geometries.length + 1}`,
+        frameId: frameOfInterest.id,
+        visible: true,
+        points: [point],
+        color: '#00ff00',
+        strokeWidth: 2,
+      };
+
+      dispatch({
+        type: 'ADD_GEOMETRY',
+        payload: { frameId: frameOfInterest.id, geometry },
+      });
+
+      return; // Não ativa modo de desenho para pontos
+    }
+
+    // Para LINHAS, FREEHAND e BRUSH: ativar modo de desenho
     setIsDrawing(true);
     setCurrentDrawing([point]);
   };
@@ -193,13 +230,43 @@ export function AnnotationCanvas() {
           <Layer>
             <Group>
               {geometries.map((geo) => renderGeometry(geo))}
+              {/* Preview durante desenho */}
               {isDrawing && currentDrawingPoints.length > 0 && (
-                <Line
-                  points={currentDrawingPoints}
-                  stroke={state.currentTool === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00'}
-                  strokeWidth={state.currentTool === 'brush' ? 10 : 2}
-                  closed={state.currentTool === 'freehand'}
-                />
+                <>
+                  {/* Para LINHAS: mostrar linha sendo formada */}
+                  {state.currentTool === 'line' && currentDrawing.length === 2 && (
+                    <>
+                      <Line
+                        points={currentDrawingPoints}
+                        stroke="#00ff00"
+                        strokeWidth={2}
+                        dash={[5, 5]}
+                      />
+                      <Circle
+                        x={currentDrawing[0].x * dimensions.width}
+                        y={currentDrawing[0].y * dimensions.height}
+                        radius={5}
+                        fill="#00ff00"
+                      />
+                      <Circle
+                        x={currentDrawing[1].x * dimensions.width}
+                        y={currentDrawing[1].y * dimensions.height}
+                        radius={5}
+                        fill="#00ff00"
+                      />
+                    </>
+                  )}
+                  {/* Para FREEHAND e BRUSH: mostrar traço sendo desenhado */}
+                  {(state.currentTool === 'freehand' || state.currentTool === 'brush') && (
+                    <Line
+                      points={currentDrawingPoints}
+                      stroke={state.currentTool === 'brush' && state.brushMode === 'subtract' ? '#ff0000' : '#00ff00'}
+                      strokeWidth={state.currentTool === 'brush' ? 10 : 2}
+                      closed={state.currentTool === 'freehand'}
+                      opacity={0.7}
+                    />
+                  )}
+                </>
               )}
             </Group>
           </Layer>
