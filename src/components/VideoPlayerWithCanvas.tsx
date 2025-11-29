@@ -10,6 +10,7 @@ import {
   ZoomIn,
   ZoomOut,
   ZoomOutMap,
+  FileDownload,
 } from '@mui/icons-material';
 import { useApp } from '../contexts/AppContext';
 import type {
@@ -660,6 +661,132 @@ export function VideoPlayerWithCanvas() {
     dispatch({ type: 'SET_ZOOM', payload: 1 });
   };
 
+  const handleExportMask = () => {
+    if (!state.videoMetadata) {
+      alert('Nenhum vídeo carregado');
+      return;
+    }
+
+    const currentFrameOfInterest = getCurrentFrameOfInterest();
+    if (!currentFrameOfInterest) {
+      alert('Nenhum frame de interesse no frame atual');
+      return;
+    }
+
+    // Buscar anotação de máscaras
+    const maskAnnotation = currentFrameOfInterest.annotations.find(
+      (ann) => ann.type === 'masks' && ann.visible
+    );
+
+    if (!maskAnnotation) {
+      alert('Nenhuma máscara encontrada neste frame');
+      return;
+    }
+
+    const masksData = maskAnnotation.data as MasksAnnotation;
+
+    // Verificar se tem máscaras ou polígono unificado
+    if ((!masksData.unified || masksData.unified.length === 0) && masksData.paths.length === 0) {
+      alert('Nenhuma máscara desenhada neste frame');
+      return;
+    }
+
+    // Criar canvas temporário com dimensões originais do vídeo
+    const canvas = document.createElement('canvas');
+    canvas.width = state.videoMetadata.width;
+    canvas.height = state.videoMetadata.height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      alert('Erro ao criar contexto do canvas');
+      return;
+    }
+
+    // Fundo preto (0, 0, 0)
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Desenhar máscara em branco (255, 255, 255)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#FFFFFF';
+
+    // Se temos polígono unificado, usar ele
+    if (masksData.unified && masksData.unified.length > 0) {
+      masksData.unified.forEach((ring, ringIndex) => {
+        ctx.beginPath();
+
+        ring.forEach((p, index) => {
+          const x = p.x * canvas.width;
+          const y = p.y * canvas.height;
+
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+
+        ctx.closePath();
+
+        // Primeiro ring (exterior) preenche branco, demais (buracos) preenchem preto
+        if (ringIndex === 0) {
+          ctx.fill();
+        } else {
+          ctx.fillStyle = '#000000';
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+        }
+      });
+    } else {
+      // Se não tem união, desenhar cada path individual
+      masksData.paths.forEach((path) => {
+        ctx.beginPath();
+
+        let pathPoints: Point[];
+
+        if (path.type === 'brush') {
+          // Brush: gerar contorno circular
+          const brushRadius = state.brushSize / canvas.width / 2;
+          pathPoints = generateBrushOutline(path.points, brushRadius);
+        } else {
+          // Freehand: usar pontos diretamente
+          pathPoints = path.points;
+        }
+
+        pathPoints.forEach((p, index) => {
+          const x = p.x * canvas.width;
+          const y = p.y * canvas.height;
+
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    // Converter canvas para blob e fazer download
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        alert('Erro ao gerar imagem da máscara');
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `mascara_frame_${state.currentFrame}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  };
+
   const handlePlayPause = () => {
     dispatch({ type: 'TOGGLE_PLAY' });
   };
@@ -871,6 +998,16 @@ export function VideoPlayerWithCanvas() {
             <Tooltip title="Salvar como frame de interesse">
               <IconButton onClick={handleSaveFrame} color="secondary">
                 <Bookmark />
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Exportar máscara binária (PNG)">
+              <IconButton
+                onClick={handleExportMask}
+                color="primary"
+                disabled={!currentFrameOfInterest || !currentFrameOfInterest.annotations.some(ann => ann.type === 'masks' && ann.visible)}
+              >
+                <FileDownload />
               </IconButton>
             </Tooltip>
 
