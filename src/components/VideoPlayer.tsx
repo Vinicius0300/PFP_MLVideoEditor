@@ -25,11 +25,15 @@ export function VideoPlayer() {
     const video = videoRef.current;
     if (!video || !state.videoMetadata) return;
 
+    // NÃO atualizar currentTime durante reprodução
+    // Isso causava conflito: o vídeo tocava naturalmente mas o useEffect ficava forçando currentTime
+    if (state.isPlaying) return;
+
     const frameTime = 1 / state.videoMetadata.frameRate;
     const targetTime = state.currentFrame * frameTime;
 
     video.currentTime = targetTime;
-  }, [state.currentFrame, state.videoMetadata]);
+  }, [state.currentFrame, state.videoMetadata, state.isPlaying]);
 
   useEffect(() => {
     const video = videoRef.current;
