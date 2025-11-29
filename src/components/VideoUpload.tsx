@@ -12,9 +12,9 @@ export function VideoUpload() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const validTypes = ['video/mp4', 'video/x-msvideo', 'video/avi'];
+    const validTypes = ['video/mp4', 'video/webm'];
     if (!validTypes.includes(file.type)) {
-      alert('Por favor, selecione um arquivo de vídeo válido (MP4 ou AVI)');
+      alert('Por favor, selecione um arquivo de vídeo válido (MP4 ou WebM).\n\nNota: AVI não é suportado pelos navegadores web.');
       return;
     }
 
@@ -59,7 +59,7 @@ export function VideoUpload() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/mp4,video/x-msvideo,video/avi"
+        accept="video/mp4,video/webm"
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
@@ -68,7 +68,10 @@ export function VideoUpload() {
         Upload de Vídeo
       </Typography>
       <Typography variant="body2" color="text.secondary" paragraph>
-        Selecione um arquivo de vídeo para análise (MP4 ou AVI)
+        Selecione um arquivo de vídeo para análise (MP4 ou WebM)
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+        Nota: Formato AVI não é suportado pelos navegadores web
       </Typography>
       <Button
         variant="contained"

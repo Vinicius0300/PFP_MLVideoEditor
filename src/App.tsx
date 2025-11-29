@@ -1,11 +1,12 @@
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { AppProvider, useApp } from './contexts/AppContext';
-import { Box, Container, AppBar, Toolbar, Typography, Stack } from '@mui/material';
+import { Box, Container, AppBar, Toolbar, Typography, Stack, Button } from '@mui/material';
 import { VideoUpload } from './components/VideoUpload';
 import { VideoPlayer } from './components/VideoPlayer';
 import { AnnotationCanvas } from './components/AnnotationCanvas';
 import { ToolBar } from './components/ToolBar';
 import { FramesSidebar } from './components/FramesSidebar';
+import { VideoLibrary } from '@mui/icons-material';
 
 const theme = createTheme({
   palette: {
@@ -20,7 +21,13 @@ const theme = createTheme({
 });
 
 function AppContent() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
+
+  const handleChangeVideo = () => {
+    if (window.confirm('Tem certeza que deseja trocar o vídeo? Todas as anotações serão perdidas.')) {
+      dispatch({ type: 'CLEAR_VIDEO' });
+    }
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -29,6 +36,15 @@ function AppContent() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             VideoML Editor - Análise de Vídeos Médicos
           </Typography>
+          {state.videoUrl && (
+            <Button
+              color="inherit"
+              startIcon={<VideoLibrary />}
+              onClick={handleChangeVideo}
+            >
+              Trocar Vídeo
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 

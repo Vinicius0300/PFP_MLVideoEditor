@@ -4,6 +4,7 @@ import type { AppState, FrameOfInterest, Geometry, VideoMetadata, ToolType } fro
 
 type AppAction =
   | { type: 'SET_VIDEO'; payload: { url: string; metadata: VideoMetadata } }
+  | { type: 'CLEAR_VIDEO' }
   | { type: 'SET_CURRENT_FRAME'; payload: number }
   | { type: 'TOGGLE_PLAY' }
   | { type: 'ADD_FRAME_OF_INTEREST'; payload: FrameOfInterest }
@@ -47,6 +48,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
         videoMetadata: action.payload.metadata,
         currentFrame: 0,
         framesOfInterest: [],
+      };
+
+    case 'CLEAR_VIDEO':
+      return {
+        ...initialState,
       };
 
     case 'SET_CURRENT_FRAME':

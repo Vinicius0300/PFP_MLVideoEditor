@@ -17,8 +17,9 @@ Diferentemente de ferramentas como ImageJ, o VideoML Editor oferece:
 ## 🚀 Funcionalidades
 
 ### Upload e Gerenciamento de Vídeos
-- Suporte para vídeos AVI e MP4
+- Suporte para vídeos MP4 e WebM
 - Upload direto no navegador
+- Botão para trocar vídeo durante a análise
 
 ### Player de Vídeo
 - Controles de reprodução (play, pause)
