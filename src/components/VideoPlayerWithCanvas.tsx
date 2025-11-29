@@ -56,6 +56,16 @@ export function VideoPlayerWithCanvas() {
     const video = videoRef.current;
     if (!video || !state.videoMetadata) return;
 
+    // NÃO atualizar currentTime durante reprodução
+    // Isso causava conflito: o vídeo tocava naturalmente mas o useEffect ficava forçando currentTime
+    if (state.isPlaying) {
+      // Durante reprodução, apenas forçar redraw do canvas
+      if (layerRef.current) {
+        layerRef.current.batchDraw();
+      }
+      return;
+    }
+
     const frameTime = 1 / state.videoMetadata.frameRate;
     const targetTime = state.currentFrame * frameTime;
 
@@ -65,7 +75,7 @@ export function VideoPlayerWithCanvas() {
     if (layerRef.current) {
       layerRef.current.batchDraw();
     }
-  }, [state.currentFrame, state.videoMetadata]);
+  }, [state.currentFrame, state.videoMetadata, state.isPlaying]);
 
   // Controle de Play/Pause
   useEffect(() => {
